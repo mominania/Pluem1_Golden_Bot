@@ -1,0 +1,43 @@
+name: Gold News Bot
+
+on:
+  schedule:
+    - cron: '0 * * * *'      # รันทุกชั่วโมง (ตรงนาทีที่ 0, เวลา UTC)
+  workflow_dispatch: {}        # ปุ่มกดรันเองได้จากแท็บ Actions
+
+permissions:
+  contents: write              # ให้สิทธิ์ commit ไฟล์สถานะกลับเข้า repo
+
+concurrency:
+  group: gold-news
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: ติดตั้ง dependencies
+        run: pip install requests feedparser
+
+      - name: ดึงข่าวและส่งเข้า Telegram
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MAX_PER_RUN: '8'         # ส่งได้สูงสุดกี่ข่าวต่อรอบ (กันสแปม)
+          LANG_HL: 'en-US'         # เปลี่ยนเป็น 'th' ถ้าอยากได้ข่าวภาษาไทย
+          STRICT_SOURCES: '1'      # 1 = เฉพาะสำนักข่าวใหญ่ในลิสต์ ALLOWED_SOURCES, 0 = ทุกแหล่ง
+        run: python gold_news_bot.py
+
+      - name: บันทึกสถานะข่าวที่ส่งแล้ว
+        run: |
+          git config user.name "gold-news-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add state/seen.json
+          git commit -m "chore: update seen state" || echo "ไม่มีอะไรเปลี่ยน"
+          git push || echo "ไม่มีอะไรต้อง push"
